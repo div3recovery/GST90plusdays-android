@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Version number goes up by itself with every GitHub build, so phones accept the newer APK as an update
+def buildNo = (System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger()
+
+android {
+    namespace 'io.github.div3recovery.gst90'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'io.github.div3recovery.gst90'
+        minSdk 29
+        targetSdk 36
+        versionCode buildNo
+        versionName "1.0.${buildNo}"
+        // the web app the APK opens (GitHub Pages)
+        buildConfigField 'String', 'START_URL', '"https://div3recovery.github.io/GST90plusdays/"'
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    signingConfigs {
+        release {
+            def ks = System.getenv('KEYSTORE_FILE')
+            if (ks) {
+                storeFile file(ks)
+                storeType 'pkcs12'
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias 'gst90'
+                keyPassword System.getenv('KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv('KEYSTORE_FILE')) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">90+ Days GST Recovery</string>
+    <string name="no_app">No app found to open this.</string>
+    <string name="saved">Saved in Downloads</string>
+    <string name="save_failed">Could not save the file.</string>
+</resources>
