@@ -1,18 +1,41 @@
 name: Build 90+ Days GST Recovery APK
 
 on:
-  workflow_dispatch:        # "Run workflow" button on the Actions tab
+  workflow_dispatch:
   push:
     branches: [ main ]
 
 permissions:
-  contents: write           # to publish the APK on the Releases page
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: 1 - Check files
+        run: |
+          ok=1
+          for f in settings.gradle build.gradle gradle.properties app/build.gradle app/src/main/AndroidManifest.xml; do
+            if [ ! -f "$f" ]; then echo "::error::Missing file: $f (files must be at the top of the repository, not inside another folder)"; ok=0; fi
+          done
+          [ $ok = 1 ] || exit 1
+          echo "All project files found."
+
+      - name: 2 - Check signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "::error::Secret KEYSTORE_BASE64 is missing (Settings > Secrets and variables > Actions > Repository secrets)."; exit 1; fi
+          if [ -z "$KEYSTORE_PASSWORD" ]; then echo "::error::Secret KEYSTORE_PASSWORD is missing (Settings > Secrets and variables > Actions > Repository secrets)."; exit 1; fi
+          PW="$(printf '%s' "$KEYSTORE_PASSWORD" | tr -d '\r\n ')"
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/gst90.p12" || { echo "::error::KEYSTORE_BASE64 is not correct - paste the whole KEYSTORE_BASE64.txt again."; exit 1; }
+          keytool -list -storetype PKCS12 -keystore "$RUNNER_TEMP/gst90.p12" -storepass "$PW" > /dev/null || { echo "::error::KEYSTORE_PASSWORD does not open the key - paste KEYSTORE_PASSWORD.txt again (no spaces)."; exit 1; }
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/gst90.p12" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$PW" >> "$GITHUB_ENV"
+          echo "Signing key OK."
 
       - uses: actions/setup-java@v4
         with:
@@ -23,37 +46,25 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      - name: Prepare signing key
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Secret KEYSTORE_BASE64 is missing (Settings > Secrets and variables > Actions)."
-            exit 1
-          fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/gst90.p12"
-          echo "KEYSTORE_FILE=$RUNNER_TEMP/gst90.p12" >> "$GITHUB_ENV"
+      - name: 3 - Build APK
+        run: gradle --no-daemon --stacktrace :app:assembleRelease
 
-      - name: Build APK
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        run: gradle --no-daemon :app:assembleRelease
-
-      - name: Name the file
+      - name: 4 - Name the file
         run: |
           mkdir -p out
           cp app/build/outputs/apk/release/*.apk "out/90plus-Days-GST-Recovery.apk"
+          ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: 90plus-Days-GST-Recovery-${{ github.run_number }}
           path: out/
 
-      - name: Publish on the Releases page (download link stays the same for every version)
+      - name: 5 - Publish on the Releases page
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: 90+ Days GST Recovery 1.0.${{ github.run_number }}
-          body: "Android app for 90+ Days GST Recovery – Gandhinagar Division. Download 90plus-Days-GST-Recovery.apk below."
+          body: "Android app for 90+ Days GST Recovery - Gandhinagar Division. Download 90plus-Days-GST-Recovery.apk below."
           files: out/90plus-Days-GST-Recovery.apk
           make_latest: true
